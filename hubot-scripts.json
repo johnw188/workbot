@@ -1,1 +1,1 @@
-["redis-brain.coffee", "ackbar.coffee", "archer.coffee", "shipit.coffee", "howdoi.coffee"]
+["redis-brain.coffee", "ackbar.coffee", "archer.coffee", "shipit.coffee", "howdoi.coffee", "http-post-say.coffee"]
