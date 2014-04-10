@@ -14,5 +14,5 @@
 
 module.exports = (robot) ->
 
-  robot.respond /\b[A-Z]+\-[0-9]+\b/i, (msg) ->
-    msg.send "JIRA: https://jira.workday.com/browse/" + msg.match[0]
+  robot.respond /(\b[A-Z]+\-[0-9]+\b)/i, (msg) ->
+    msg.send "JIRA: https://jira.workday.com/browse/" + msg.match[1]
