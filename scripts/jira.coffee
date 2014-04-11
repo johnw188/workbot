@@ -15,7 +15,7 @@
 Url = require 'url'
 NRP = require('node-redis-pubsub')
 
-redisUrl = Url.parse process.env.HUBOT_REDISADAPTER_URL
+redisUrl = Url.parse process.env.REDISTOGO_URL
 
 console.log redisUrl
 
