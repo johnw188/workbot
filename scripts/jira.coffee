@@ -29,4 +29,4 @@ nrp = new NRP config
 
 module.exports = (robot) ->
   robot.respond /(\b[A-Z]+\-[0-9]+\b)/i, (msg) ->
-    nrp.emit('jiraLookup', {jiraID: msg.match[1]})
+    nrp.emit('jiraLookup', {jiraID: msg.match[1], room: msg.message.room})
