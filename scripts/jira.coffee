@@ -30,4 +30,3 @@ nrp = new NRP config
 module.exports = (robot) ->
   robot.respond /(\b[A-Z]+\-[0-9]+\b)/i, (msg) ->
     nrp.emit('jiraLookup', {jiraID: msg.match[1]})
-    msg.send "JIRA: https://jira.workday.com/browse/" + msg.match[1]
