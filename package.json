@@ -25,7 +25,8 @@
     "hubot-scripts": ">= 2.5.0 < 3.0.0",
     "hubot-slack": "2.1.0",
     "node-redis-pubsub": "0.2.1",
-    "scraper": "0.0.9"
+    "scraper": "0.0.9",
+    "cheerio": "~0.12.0"
   },
   "engines": {
     "node": ">= 0.8.x",
