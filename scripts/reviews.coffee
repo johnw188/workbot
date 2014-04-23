@@ -8,12 +8,12 @@
 #   None
 #
 # Commands:
-#   hubot list CRs - List all pending code reviews
-#   hubot flush CRs - Flush the code review queue
+#   hubot list reviews - List all pending code reviews
+#   hubot flush reviews - Flush the code review queue
 #   hubot nm - Undo the last addition
 #   hubot on it - Mark the last addition as under review
-#   (code review|cr|pr) <github-url> - Add a code review to the queue
-#   <github-url> - Add a code review to the queue
+#   (Review|cr|pr) <crucible-url> - Add a code review to the queue
+#   <crucible-url> - Add a code review to the queue
 #   (<name> is )reviewing <slug> - Remove a code review from the queue
 #   ignore <slug> - Remove a code review from the queue
 #
