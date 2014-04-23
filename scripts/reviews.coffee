@@ -168,7 +168,7 @@ module.exports = (robot) ->
   robot.hear /.*(?:Review|\b[cp]r\b).*(https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
   robot.hear /(^https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
 
-  robot.hear /(?:([-_a-z0-9]+) is )?(?:reviewing|ignore) ([-_\/a-z0-9]+\/\d+).*/i, (msg) ->
+  robot.hear /(?:([-_a-z0-9]+) is )?(?:reviewing|ignore) ([-_\/A-Z0-9]+).*/i, (msg) ->
     reviewer = msg.match[1] or msg.message.user.name
     slug = msg.match[2]
 
