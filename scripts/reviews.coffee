@@ -64,7 +64,7 @@ class Code_Reviews
 
   karma: (give, take) ->
     if take == 0 and give > 0
-      return 1000000
+      return 9001
     return Math.round( ( give / take - 1 ) * 100 ) / 100
 
   rankings: ->
@@ -87,6 +87,21 @@ class Code_Reviews
         karmas.user = karmas.user + ', ' + user
 
     [gives, takes, karmas ]
+
+  addReviewerToLatestReview: (user) ->
+    console.log "Adding a reviewer to latest review"
+    return unless user.room
+    if @room_queues[user.room] and @room_queues[user.room].length
+      roomQueue = @room_queues[user.room]
+      cr = roomQueue[roomQueue.length - 1]
+      cr.reviewers.push(user.name)
+      console.log cr, cr.reviewers.length, cr.reviewersRequired, cr.reviewers.length >= cr.reviewersRequired
+      if cr.reviewersRequiredMet()
+        console.log "we have enough reviewers"
+        roomQueue.pop()
+        delete @room_queues[user.room] if roomQueue.length is 0
+        @check_queue()
+    return cr ? cr : false
 
   pop: (user) ->
     return unless user.room
@@ -120,7 +135,8 @@ class Code_Reviews
     if user.room and @room_queues[user.room] and @room_queues[user.room].length > 0
       reviews = ''
       for cr in @room_queues[user.room]
-        reviews += "\n" + cr.url + '|' + cr.slug
+        console.log cr
+        reviews += "\n#{cr.url}|#{cr.slug} - Review for *#{cr.user.name}*, #{cr.reviewersRequired}"
       return "There are pending code reviews. Any takers?" + reviews
     else if true == verbose
       return "There are no pending code reviews for this room."
@@ -145,10 +161,15 @@ class Code_Reviews
 
 class Code_Review
   constructor: (@user, @slug, @url) ->
-
+    @reviewersRequired = 2
+    @reviewers = []
+    
+  reviewersRequiredMet: ->
+    value = @reviewers.length >= @reviewersRequired;
+    console.log "Reviewers required met for #{@reviewersRequired} and #{@reviewers}? #{value}"
+    return value
 
 module.exports = (robot) ->
-
   code_reviews = new Code_Reviews robot
 
   enqueue_code_review = (msg) =>
@@ -193,11 +214,16 @@ module.exports = (robot) ->
 
   robot.respond /(?:([-_a-z0-9]+) is )?on it/i, (msg) ->
     reviewer = msg.match[1] or msg.message.user.name
-    cr = code_reviews.pop(msg.message.user)
+    cr = code_reviews.addReviewerToLatestReview(msg.message.user)
 
     if cr and cr.slug
       code_reviews.incr_score reviewer, 'give'
-      msg.send "Thanks, #{reviewer}! I removed #{cr.slug} from the code review queue."
+      if cr.reviewersRequiredMet()
+        msg.send "Thanks, #{cr.reviewers.join(' and ')}! I removed #{cr.slug} from the code review queue."
+      else
+        msg.send "Thanks, #{reviewer}! #{remainingReviewers = cr.reviewersRequired - cr.reviewers.length} more reviewer#{if remainingReviewers == 1 then '' else 's'} needed"
+    else
+      msg.send "Sorry, #{reviewer}, something went wrong"
 
   robot.respond /(?:what (?:is|are) the )?(?:code review|cr) (?:rankings|leaderboard)\??/i, (msg) ->
     [gives, takes, karmas] = code_reviews.rankings()
