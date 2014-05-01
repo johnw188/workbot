@@ -28,15 +28,22 @@ class Code_Reviews
     @reminder_count = 0
 
     @robot.brain.on 'loaded', =>
-      if @robot.brain.data.code_reviews
-        cache = @robot.brain.data.code_reviews
+      console.log "just loaded brain"
+      console.log @robot.brain.data
+      if @robot.brain.data.mobile_code_reviews
+        cache = @robot.brain.data.mobile_code_reviews
         @room_queues = cache.room_queues || {}
         @scores = cache.scores || {}
         unless Object.keys(@room_queues).length is 0
           @queue()
+      else
+        @robot.brain.data.mobile_code_reviews = {}
 
   update_redis: ->
-    @robot.brain.data.code_reviews = { room_queues: @room_queues, scores: @scores }
+    console.log @room_queues
+    @robot.brain.data.mobile_code_reviews.room_queues = @room_queues
+    @robot.brain.data.mobile_code_reviews.scores = @scores
+    console.log @robot.brain.data.mobile_code_reviews.room_queues
 
   find_slug: (room, slug) ->
     console.log "Finding " + slug + " in " + room
@@ -48,6 +55,7 @@ class Code_Reviews
   add: (cr) ->
     return unless cr.user.room
     @room_queues[cr.user.room] ||= []
+    console.log cr
     @room_queues[cr.user.room].push(cr) if false == @find_slug(cr.user.room, cr.slug)
     @update_redis()
     @reminder_count = 0
@@ -88,6 +96,16 @@ class Code_Reviews
 
     [gives, takes, karmas ]
 
+  userAlreadyOnLatestReview(user, room) ->
+    if @room_queues[user.room] and @room_queues[user.room].length
+      cr = @room_queues[user.room][roomQueue.length - 1]
+      if user in cr.reviewers
+        return true
+    return false
+          
+  userAlreadyOnSlug(user, room, slug) ->
+    
+    
   addReviewerToLatestReview: (user) ->
     console.log "Adding a reviewer to latest review"
     return unless user.room
@@ -96,10 +114,26 @@ class Code_Reviews
       cr = roomQueue[roomQueue.length - 1]
       cr.reviewers.push(user.name)
       console.log cr, cr.reviewers.length, cr.reviewersRequired, cr.reviewers.length >= cr.reviewersRequired
-      if cr.reviewersRequiredMet()
+      if cr.reviewers.length >= cr.reviewersRequired
         console.log "we have enough reviewers"
         roomQueue.pop()
         delete @room_queues[user.room] if roomQueue.length is 0
+        @update_redis()
+        @check_queue()
+    return cr ? cr : false
+    
+  addReviewerToReview: (user, slug) ->
+    console.log "Adding a reviewer to review: #{slug}"
+    return unless user.room
+    i = @find_slug(user.room, slug)
+    unless i is false
+      cr = @room_queues[user.room][i]
+      cr.reviewers.push(user.name)
+      if cr.reviewers.length >= cr.reviewersRequired
+        console.log "we have enough reviewers"
+        @room_queues[user.room].splice(i,1)
+        delete @room_queues[user.room] if @room_queues[user.room].length is 0
+        @update_redis()
         @check_queue()
     return cr ? cr : false
 
@@ -108,6 +142,7 @@ class Code_Reviews
     if @room_queues[user.room] and @room_queues[user.room].length
       cr = @room_queues[user.room].pop()
       delete @room_queues[user.room] if @room_queues[user.room].length is 0
+      @update_redis()
       @check_queue()
     return cr ? cr : false
 
@@ -117,7 +152,7 @@ class Code_Reviews
     unless i is false
       cr = @room_queues[user.room].splice(i,1)
       delete @room_queues[user.room] if @room_queues[user.room].length is 0
-      @robot.brain.data.code_reviews = @room_queues
+      @update_redis()
       @check_queue()
       return cr.pop()
     false
@@ -128,7 +163,7 @@ class Code_Reviews
 
   flush: ->
     @room_queues = {}
-    @robot.brain.data.code_reviews = @room_queues
+    @update_redis()
     clearTimeout @current_timeout if @current_timeout
 
   list: (user, verbose) ->
@@ -136,7 +171,10 @@ class Code_Reviews
       reviews = ''
       for cr in @room_queues[user.room]
         console.log cr
-        reviews += "\n#{cr.url}|#{cr.slug} - Review for *#{cr.user.name}*, #{cr.reviewersRequired}"
+        reviews += "\n#{cr.url}|#{cr.slug} - Review for *#{cr.user.name}*"
+        if cr.reviewers.length > 0
+          reviews += " (already reviewed by #{cr.reviewers.join(' and ')})"
+        reviews += ". #{remainingReviewers = cr.reviewersRequired - cr.reviewers.length} more reviewer#{if remainingReviewers == 1 then '' else 's'} needed"
       return "There are pending code reviews. Any takers?" + reviews
     else if true == verbose
       return "There are no pending code reviews for this room."
@@ -160,14 +198,10 @@ class Code_Reviews
       @current_timeout = setTimeout(trigger, nag_delay)
 
 class Code_Review
-  constructor: (@user, @slug, @url) ->
-    @reviewersRequired = 2
-    @reviewers = []
-    
+  constructor: (@user, @slug, @url, @reviewersRequired = 2, @reviewers = []) ->
+
   reviewersRequiredMet: ->
-    value = @reviewers.length >= @reviewersRequired;
-    console.log "Reviewers required met for #{@reviewersRequired} and #{@reviewers}? #{value}"
-    return value
+    return @reviewers.length >= @reviewersRequired;
 
 module.exports = (robot) ->
   code_reviews = new Code_Reviews robot
@@ -193,9 +227,13 @@ module.exports = (robot) ->
     reviewer = msg.match[1] or msg.message.user.name
     slug = msg.match[2]
 
-    if cr = code_reviews.remove msg.message.user, slug
+    cr = code_reviews.addReviewerToReview msg.message.user, slug
+    if cr and cr.slug
       code_reviews.incr_score reviewer, 'give'
-      msg.send "Thanks, #{reviewer}! I removed #{cr.slug} from the code review queue."
+      if cr.reviewers.length >= cr.reviewersRequired
+        msg.send "Thanks, #{cr.reviewers.join(' and ')}! I removed #{cr.slug} from the code review queue."
+      else
+        msg.send "Thanks, #{reviewer}! #{remainingReviewers = cr.reviewersRequired - cr.reviewers.length} more reviewer#{if remainingReviewers == 1 then '' else 's'} needed"
     else
       msg.send "Hmm, I could not find #{slug} in the code review queue."
 
@@ -218,19 +256,19 @@ module.exports = (robot) ->
 
     if cr and cr.slug
       code_reviews.incr_score reviewer, 'give'
-      if cr.reviewersRequiredMet()
+      if cr.reviewers.length >= cr.reviewersRequired
         msg.send "Thanks, #{cr.reviewers.join(' and ')}! I removed #{cr.slug} from the code review queue."
       else
         msg.send "Thanks, #{reviewer}! #{remainingReviewers = cr.reviewersRequired - cr.reviewers.length} more reviewer#{if remainingReviewers == 1 then '' else 's'} needed"
     else
       msg.send "Sorry, #{reviewer}, something went wrong"
 
-  robot.respond /(?:what (?:is|are) the )?(?:code review|cr) (?:rankings|leaderboard)\??/i, (msg) ->
+  robot.respond /review leaderboard/i, (msg) ->
     [gives, takes, karmas] = code_reviews.rankings()
     msg.send "#{gives.user} #{if gives.user.indexOf(',') > -1 then 'have' else 'has'} done the most reviews with #{gives.score}"
     msg.send "#{takes.user} #{if takes.user.indexOf(',') > -1 then 'have' else 'has'} asked for the most code reviews with #{takes.score}"
     msg.send "#{karmas.user} #{if karmas.user.indexOf(',') > -1 then 'have' else 'has'} the best code karma score with #{karmas.score}"
 
-  robot.respond /list all (?:code review|cr) scores/i, (msg) ->
+  robot.respond /list review (scores|karma)/i, (msg) ->
     for user, scores of code_reviews.scores
       msg.send "#{user} has received #{scores.take} reviews and given #{scores.give}. Code karma: #{code_reviews.karma(scores.give, scores.take)}"
