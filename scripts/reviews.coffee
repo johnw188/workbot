@@ -10,15 +10,16 @@
 # Commands:
 #   hubot list reviews - List all pending code reviews
 #   hubot flush reviews - Flush the code review queue
+#   hubot review leaderboard - Show the leaderboard
+#   hubot list review karma - Show user karma values
 #   hubot nm - Undo the last addition
 #   hubot on it - Mark the last addition as under review
-#   (Review|cr|pr) <crucible-url> - Add a code review to the queue
 #   <crucible-url> - Add a code review to the queue
-#   (<name> is )reviewing <slug> - Remove a code review from the queue
-#   ignore <slug> - Remove a code review from the queue
+#   hubot (<name> is )reviewing <slug> - Remove a code review from the queue
+#   hubot ignore <slug> - Remove a code review from the queue
 #
 # Author:
-#   mboynes
+#   mboynes, john.welsh
 
 class Code_Reviews
   constructor: (@robot) ->
@@ -96,43 +97,48 @@ class Code_Reviews
 
     [gives, takes, karmas ]
 
-  userAlreadyOnLatestReview(user, room) ->
-    if @room_queues[user.room] and @room_queues[user.room].length
-      cr = @room_queues[user.room][roomQueue.length - 1]
-      if user in cr.reviewers
-        return true
+  userAlreadyOnLatestReview: (username, room) ->
+    if @room_queues[room] and @room_queues[room].length
+      cr = @room_queues[room][@room_queues[room].length - 1]
+      if username in cr.reviewers or username == cr.user.name
+        return cr.slug
     return false
           
-  userAlreadyOnSlug(user, room, slug) ->
+  userAlreadyOnSlug: (username, room, slug) ->
+    i = @find_slug(room, slug)
+    unless i is false
+      cr = @room_queues[room][i]
+      if username in cr.reviewers or username == cr.user.name
+        return cr.slug
+    return false
     
-    
-  addReviewerToLatestReview: (user) ->
+  addReviewerToLatestReview: (username, room) ->
     console.log "Adding a reviewer to latest review"
-    return unless user.room
-    if @room_queues[user.room] and @room_queues[user.room].length
-      roomQueue = @room_queues[user.room]
+    return unless room
+    if @room_queues[room] and @room_queues[room].length
+      roomQueue = @room_queues[room]
       cr = roomQueue[roomQueue.length - 1]
-      cr.reviewers.push(user.name)
+      cr.reviewers.push(username)
       console.log cr, cr.reviewers.length, cr.reviewersRequired, cr.reviewers.length >= cr.reviewersRequired
       if cr.reviewers.length >= cr.reviewersRequired
         console.log "we have enough reviewers"
         roomQueue.pop()
-        delete @room_queues[user.room] if roomQueue.length is 0
+        delete @room_queues[room] if roomQueue.length is 0
         @update_redis()
         @check_queue()
     return cr ? cr : false
     
-  addReviewerToReview: (user, slug) ->
+  addReviewerToReview: (username, room, slug) ->
     console.log "Adding a reviewer to review: #{slug}"
-    return unless user.room
-    i = @find_slug(user.room, slug)
+    return unless room
+    i = @find_slug(room, slug)
     unless i is false
-      cr = @room_queues[user.room][i]
-      cr.reviewers.push(user.name)
+      cr = @room_queues[room][i]
+      cr.reviewers.push(username)
       if cr.reviewers.length >= cr.reviewersRequired
         console.log "we have enough reviewers"
-        @room_queues[user.room].splice(i,1)
-        delete @room_queues[user.room] if @room_queues[user.room].length is 0
+        @room_queues[room].splice(i,1)
+        delete @room_queues[room] if @room_queues[room].length is 0
         @update_redis()
         @check_queue()
     return cr ? cr : false
@@ -221,13 +227,22 @@ module.exports = (robot) ->
       msg.send url + '|' + slug + ' is now in the code review queue. Let me know if anyone starts reviewing this.'
 
   robot.hear /.*(?:Review|\b[cp]r\b).*(https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
-  robot.hear /(^https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
+  robot.hear /(https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
 
-  robot.hear /(?:([-_a-z0-9]+) is )?(?:reviewing|ignore) ([-_\/A-Z0-9]+).*/i, (msg) ->
+  robot.respond /(?:([-_a-z0-9]+) is )?(?:reviewing|ignore) ([-_\/A-Z0-9]+).*/i, (msg) ->
     reviewer = msg.match[1] or msg.message.user.name
+    
+    if not robot.brain.userForName(reviewer)
+      msg.send "#{reviewer} is an invalid username"
+      return
+      
     slug = msg.match[2]
+    
+    if code_reviews.userAlreadyOnSlug(reviewer, msg.message.user.room, slug)
+      msg.send "#{reviewer} is already working on #{slug}"
+      return
 
-    cr = code_reviews.addReviewerToReview msg.message.user, slug
+    cr = code_reviews.addReviewerToReview(reviewer, msg.message.user.room, slug)
     if cr and cr.slug
       code_reviews.incr_score reviewer, 'give'
       if cr.reviewers.length >= cr.reviewersRequired
@@ -252,7 +267,16 @@ module.exports = (robot) ->
 
   robot.respond /(?:([-_a-z0-9]+) is )?on it/i, (msg) ->
     reviewer = msg.match[1] or msg.message.user.name
-    cr = code_reviews.addReviewerToLatestReview(msg.message.user)
+    if not robot.brain.userForName(reviewer)
+      msg.send "#{reviewer} is an invalid username"
+      return
+      
+    slug = code_reviews.userAlreadyOnLatestReview(reviewer, msg.message.user.room)
+    if slug
+      msg.send "#{reviewer} is already working on #{slug}"
+      return
+      
+    cr = code_reviews.addReviewerToLatestReview(reviewer, msg.message.user.room)
 
     if cr and cr.slug
       code_reviews.incr_score reviewer, 'give'
