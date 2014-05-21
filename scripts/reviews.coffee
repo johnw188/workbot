@@ -228,7 +228,7 @@ module.exports = (robot) ->
 
     findResult = code_reviews.find_slug msg.message.user.room, slug
     console.log findResult
-    if findResult
+    unless findResult is false
       msg.send slug ' is already in the code review queue'
     else
       cr = new Code_Review msg.message.user, slug, url
@@ -262,19 +262,6 @@ module.exports = (robot) ->
     else
       msg.send "Hmm, I could not find #{slug} in the code review queue."
 
-  robot.respond /remove ([-_\/A-Z0-9]+).*/, (msg) ->
-    slug = msg.match[1]
-    findResult = code_reviews.find_slug msg.message.user.room, slug
-    console.log findResult
-    if not findResult
-      msg.send slug 'Hmm, I could not find #{slug} in the code review queue.'
-    else
-      cr = removeReviewAtIndex user.room, i
-      if cr
-        msg.send 'Ok, removed #{cr.slug} from the code review queue'
-      else
-        msg.send 'Hmm, I could not find #{slug} in the code review queue'
-
   robot.respond /list reviews/i, (msg) ->
     msg.send code_reviews.list(msg.message.user, true)
 
@@ -287,6 +274,21 @@ module.exports = (robot) ->
     if cr and cr.slug
       code_reviews.decr_score cr.user.name, 'take'
       msg.send "Sorry for eavesdropping. I removed #{cr.slug} from the queue."
+
+  robot.respond /remove ([-_\/A-Z0-9]+).*/i, (msg) ->
+    console.log "NEW TEXT"
+    slug = msg.match[1]
+    findResult = code_reviews.find_slug msg.message.user.room, slug
+    console.log findResult
+    if findResult is false
+      console.log "did not find it"
+      msg.send "Hmm, I could not find #{slug} in the code review queue."
+    else
+      cr = code_reviews.removeReviewAtIndex(msg.message.user.room, findResult)
+      if cr
+        msg.send "Ok, removed #{cr.slug} from the code review queue"
+      else
+        msg.send "Hmm, I could not find #{slug} in the code review queue"
 
   robot.respond /(?:([-_a-z0-9]+) is )?on it/i, (msg) ->
     reviewer = msg.match[1] or msg.message.user.name
