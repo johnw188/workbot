@@ -163,6 +163,16 @@ class Code_Reviews
       return cr.pop()
     false
 
+  removeReviewAtIndex: (room, i) ->
+    return unless room
+    if (@room_queues[room] and @room_queues[room].length > i)
+      cr = @room_queues[room][i]
+      @room_queues[room].splice(i, 1)
+      delete @room_queues[room] if @room_queues[room] is 0
+      @update_redis()
+      @check_queue()
+    return cr ? cr : false
+
   check_queue: ->
     if Object.keys(@room_queues).length is 0
       clearTimeout @current_timeout if @current_timeout
@@ -251,6 +261,19 @@ module.exports = (robot) ->
         msg.send "Thanks, #{reviewer}! #{remainingReviewers = cr.reviewersRequired - cr.reviewers.length} more reviewer#{if remainingReviewers == 1 then '' else 's'} needed"
     else
       msg.send "Hmm, I could not find #{slug} in the code review queue."
+
+  robot.respond /remove ([-_\/A-Z0-9]+).*/, (msg) ->
+    slug = msg.match[1]
+    findResult = code_reviews.find_slug msg.message.user.room, slug
+    console.log findResult
+    if not findResult
+      msg.send slug 'Hmm, I could not find #{slug} in the code review queue.'
+    else
+      cr = removeReviewAtIndex user.room, i
+      if cr
+        msg.send 'Ok, removed #{cr.slug} from the code review queue'
+      else
+        msg.send 'Hmm, I could not find #{slug} in the code review queue'
 
   robot.respond /list reviews/i, (msg) ->
     msg.send code_reviews.list(msg.message.user, true)
