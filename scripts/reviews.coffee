@@ -13,10 +13,10 @@
 #   hubot review leaderboard - Show the leaderboard
 #   hubot list review karma - Show user karma values
 #   hubot nm - Undo the last addition
+#   hubot remove <slug> - Remove a review from the queue
 #   hubot on it - Mark the last addition as under review
 #   <crucible-url> - Add a code review to the queue
 #   hubot (<name> is )reviewing <slug> - Remove a code review from the queue
-#   hubot ignore <slug> - Remove a code review from the queue
 #
 # Author:
 #   mboynes, john.welsh
@@ -239,7 +239,7 @@ module.exports = (robot) ->
   robot.hear /.*(?:Review|\b[cp]r\b).*(https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
   robot.hear /(https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
 
-  robot.respond /(?:([-_a-z0-9]+) is )?(?:reviewing|ignore) ([-_\/A-Z0-9]+).*/i, (msg) ->
+  robot.respond /(?:([-_a-z0-9]+) is )?(?:reviewing) ([-_\/A-Z0-9]+).*/i, (msg) ->
     reviewer = msg.match[1] or msg.message.user.name
     
     if not robot.brain.userForName(reviewer)
