@@ -13,10 +13,10 @@
 #   hubot review leaderboard - Show the leaderboard
 #   hubot list review karma - Show user karma values
 #   hubot nm - Undo the last addition
+#   hubot remove <slug> - Remove a review from the queue
 #   hubot on it - Mark the last addition as under review
 #   <crucible-url> - Add a code review to the queue
 #   hubot (<name> is )reviewing <slug> - Remove a code review from the queue
-#   hubot ignore <slug> - Remove a code review from the queue
 #
 # Author:
 #   mboynes, john.welsh
@@ -163,6 +163,16 @@ class Code_Reviews
       return cr.pop()
     false
 
+  removeReviewAtIndex: (room, i) ->
+    return unless room
+    if (@room_queues[room] and @room_queues[room].length > i)
+      cr = @room_queues[room][i]
+      @room_queues[room].splice(i, 1)
+      delete @room_queues[room] if @room_queues[room] is 0
+      @update_redis()
+      @check_queue()
+    return cr ? cr : false
+
   check_queue: ->
     if Object.keys(@room_queues).length is 0
       clearTimeout @current_timeout if @current_timeout
@@ -218,7 +228,7 @@ module.exports = (robot) ->
 
     findResult = code_reviews.find_slug msg.message.user.room, slug
     console.log findResult
-    if findResult
+    unless findResult is false
       msg.send slug ' is already in the code review queue'
     else
       cr = new Code_Review msg.message.user, slug, url
@@ -229,7 +239,7 @@ module.exports = (robot) ->
   robot.hear /.*(?:Review|\b[cp]r\b).*(https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
   robot.hear /(https?:\/\/crucible\.workday\.com\/cru\/([A-Z0-9-]+))/i, enqueue_code_review
 
-  robot.respond /(?:([-_a-z0-9]+) is )?(?:reviewing|ignore) ([-_\/A-Z0-9]+).*/i, (msg) ->
+  robot.respond /(?:([-_a-z0-9]+) is )?(?:reviewing) ([-_\/A-Z0-9]+).*/i, (msg) ->
     reviewer = msg.match[1] or msg.message.user.name
     
     if not robot.brain.userForName(reviewer)
@@ -264,6 +274,21 @@ module.exports = (robot) ->
     if cr and cr.slug
       code_reviews.decr_score cr.user.name, 'take'
       msg.send "Sorry for eavesdropping. I removed #{cr.slug} from the queue."
+
+  robot.respond /remove ([-_\/A-Z0-9]+).*/i, (msg) ->
+    console.log "NEW TEXT"
+    slug = msg.match[1]
+    findResult = code_reviews.find_slug msg.message.user.room, slug
+    console.log findResult
+    if findResult is false
+      console.log "did not find it"
+      msg.send "Hmm, I could not find #{slug} in the code review queue."
+    else
+      cr = code_reviews.removeReviewAtIndex(msg.message.user.room, findResult)
+      if cr
+        msg.send "Ok, removed #{cr.slug} from the code review queue"
+      else
+        msg.send "Hmm, I could not find #{slug} in the code review queue"
 
   robot.respond /(?:([-_a-z0-9]+) is )?on it/i, (msg) ->
     reviewer = msg.match[1] or msg.message.user.name
